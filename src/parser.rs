@@ -1,5 +1,7 @@
 use std::{collections::HashMap, string::ParseError};
 
+use regex::Regex;
+
 #[derive(Default, Clone, Debug)]
 pub struct Dialogue {
     // Metadata
@@ -58,8 +60,18 @@ pub struct DialogueActor {
     pub properties: HashMap<String, DialogueVariable>,
 }
 
+const PAGE_BREAKS_REGEX: &str = r"\n+\s*[\n@]";
+
 /// Parses the given dialogue string into a dialogue data structure, if possible.
 pub fn parse(from: String) -> Result<Dialogue, ParseError> {
+    let page_breaks_regex = Regex::new(PAGE_BREAKS_REGEX).unwrap();
+
+    let foo: Vec<&str> = page_breaks_regex.split(from.as_str()).collect();
+
+    for line in foo {
+        println!("\n\n{line}");
+    }
+
     let mut dialogue = Dialogue::default();
 
     let dialogue_lines = from.split('\n');
