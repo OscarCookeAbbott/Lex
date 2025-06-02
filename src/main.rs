@@ -1,4 +1,5 @@
 use std::fs::read_to_string;
+use std::time::Instant;
 
 pub mod parser;
 pub use parser::*;
@@ -8,7 +9,10 @@ fn main() {
 
     println!("\nParsing dialogue...");
 
+    let start = Instant::now();
     let dialogue = parse(raw_dialogue).unwrap();
+    let duration = start.elapsed();
+    println!("Parsing completed in: {duration:?}");
 
     println!("\nDialogue:");
 
@@ -22,8 +26,13 @@ fn main() {
         println!("{variable_name}: {variable_value:?}");
     }
 
+    println!("\nFunctions:");
+    for function_name in dialogue.functions {
+        println!("{function_name:?}");
+    }
+
     for section in dialogue.sections {
-        println!("\n# {}", section.name);
+        println!();
 
         for page in section.pages {
             println!();
