@@ -45,6 +45,10 @@ pub enum DialogueLine {
         name: String,
         value: DialogueVariable,
     },
+    SectionBounce(String),
+    SectionJump(String),
+    EndJump,
+    TerminateJump,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -198,22 +202,6 @@ fn parse_line(line: &str, dialogue: &mut Dialogue) -> Option<DialogueLine> {
         return Some(DialogueLine::Comment(comment_text.trim().to_string()));
     }
 
-    // Check for speaker line
-    // `speaker_id: text`
-    if let Some((speaker_id, text)) = line.strip_prefix('@').and_then(|line| line.split_once(':')) {
-        let speaker_id = speaker_id.trim().to_lowercase();
-        let text = text.trim();
-
-        if !dialogue.actors.contains_key(speaker_id.as_str()) {
-            println!("WARNING: Actor definition not found ({})", speaker_id)
-        }
-
-        return Some(DialogueLine::SpeakerText {
-            speaker: speaker_id,
-            text: text.to_string(),
-        });
-    }
-
     // Check for functions
     // `!function_name` or `!function_name()` or `!function_name(arg1, ...)` or `!function_name: {default_return_value}` etc
     if let Some(function_name) = line.strip_prefix('!') {
@@ -264,6 +252,52 @@ fn parse_line(line: &str, dialogue: &mut Dialogue) -> Option<DialogueLine> {
         return Some(DialogueLine::Response {
             text: response_text.trim().to_string(),
             pages: Vec::new(),
+        });
+    }
+
+    // Check for section jump
+    // `=><= jump_section`
+    if let Some(jump_section) = line.strip_prefix("=><=") {
+        return Some(DialogueLine::SectionBounce(jump_section.trim().to_string()));
+    }
+
+    // Check for section jump
+    // `=> jump_section`
+    if let Some(jump_section) = line.strip_prefix("=>") {
+        let jump_section = jump_section.trim().to_string();
+
+        if jump_section.to_lowercase() == "end" {
+            return Some(DialogueLine::EndJump);
+        }
+
+        if jump_section.to_lowercase() == "terminate" {
+            return Some(DialogueLine::TerminateJump);
+        }
+
+        return Some(DialogueLine::SectionJump(jump_section));
+    }
+
+    // Check for speaker line
+    // `speaker_id: text` or `@spaker_id: text`
+    if let Some((speaker, text)) = line.split_once(':') {
+        // Check if speaker is anonymous
+        let Some(speaker_id) = speaker.strip_prefix('@') else {
+            return Some(DialogueLine::SpeakerText {
+                speaker: speaker.trim().to_string(),
+                text: text.trim().to_string(),
+            });
+        };
+
+        let speaker_id = speaker_id.trim().to_lowercase();
+        let text = text.trim().to_string();
+
+        if !dialogue.actors.contains_key(speaker_id.as_str()) {
+            println!("WARNING: Actor definition not found ({})", speaker_id)
+        }
+
+        return Some(DialogueLine::SpeakerText {
+            speaker: speaker_id,
+            text,
         });
     }
 

@@ -3,7 +3,10 @@ use crate::*;
 
 #[test]
 fn test_actor_with_properties() {
-    let input = "@Oscar\nfull_name: Oscar Cooke-Abbott\nage: 26";
+    let input = r"
+@Oscar
+full_name: Oscar Cooke-Abbott
+age: 26";
 
     let expected = Dialogue {
         actors: std::collections::HashMap::from([(
@@ -67,7 +70,8 @@ $example_array: [This is an entry, This is also an entry]";
 
 #[test]
 fn test_variable_assignment() {
-    let input = r"$foo: 1
+    let input = r"
+$foo: 1
 $foo = 2";
 
     let expected = Dialogue {
@@ -95,7 +99,8 @@ $foo = 2";
 
 #[test]
 fn test_function_lines() {
-    let input = r#"!example_function
+    let input = r#"
+!example_function
 !example_function_args(arg_1: Some value, arg_2: Other value)
 !example_function_text: "Default return value""#;
     let expected = Dialogue {
@@ -114,7 +119,8 @@ fn test_function_lines() {
 
 #[test]
 fn test_sections() {
-    let input = r"#Intro
+    let input = r"
+#Intro
 Hello
 #Outro
 Goodbye";
@@ -144,7 +150,8 @@ Goodbye";
 
 #[test]
 fn test_comments_and_logs() {
-    let input = r"// Comment
+    let input = r"
+// Comment
 /// Info
 //? Warning
 //! Error";
@@ -171,18 +178,11 @@ fn test_comments_and_logs() {
 
 #[test]
 fn test_speaker_lines() {
-    let input = r"@Oscar
+    let input = r"
 @Oscar: Hello
-Other: Hi";
+Other Oscar: Hi";
 
     let expected = Dialogue {
-        actors: std::collections::HashMap::from([(
-            "oscar".to_string(),
-            DialogueActor {
-                name: "Oscar".to_string(),
-                properties: std::collections::HashMap::new(),
-            },
-        )]),
         sections: vec![DialogueSection {
             name: "Meta".to_string(),
             pages: vec![DialoguePage {
@@ -192,7 +192,7 @@ Other: Hi";
                         text: "Hello".to_string(),
                     },
                     DialogueLine::SpeakerText {
-                        speaker: "other".to_string(),
+                        speaker: "Other Oscar".to_string(),
                         text: "Hi".to_string(),
                     },
                 ],
@@ -208,7 +208,8 @@ Other: Hi";
 
 #[test]
 fn test_responses_and_nesting() {
-    let input = r"- Response 1
+    let input = r"
+- Response 1
     - Nested Response";
 
     let expected = Dialogue {
@@ -237,7 +238,8 @@ fn test_responses_and_nesting() {
 
 #[test]
 fn test_manual_page_extension() {
-    let input = r"| This is a single page
+    let input = r"
+| This is a single page
 |
 | - Wow!
 | - More!";
@@ -269,7 +271,9 @@ fn test_manual_page_extension() {
 
 #[test]
 fn test_annotated_dialogue() {
-    let input = "[mood=info]\nThis is annotated.";
+    let input = r"
+[mood=info]
+This is annotated.";
 
     let expected = Dialogue::default();
 
@@ -280,7 +284,12 @@ fn test_annotated_dialogue() {
 
 #[test]
 fn test_conditional_blocks() {
-    let input = "[if=$var]\nText\n~ ELSE\nOther\n~";
+    let input = r"
+[if=$var]
+Text
+~ ELSE
+Other
+~";
 
     let expected = Dialogue::default();
 
@@ -291,7 +300,16 @@ fn test_conditional_blocks() {
 
 #[test]
 fn test_branching_repeat_while_each() {
-    let input = "~ REPEAT 3\nRepeat\n~\n~ WHILE $var < 10\nWhile\n~\n~ EACH $arr as $item\nEach\n~";
+    let input = r"
+~ REPEAT 3
+Repeat
+~
+~ WHILE $var < 10
+While
+~
+~ EACH $arr as $item
+Each
+~";
 
     let expected = Dialogue::default();
 
@@ -302,9 +320,26 @@ fn test_branching_repeat_while_each() {
 
 #[test]
 fn test_jumps() {
-    let input = "=> #Outro\n=> END\n=><= #Outro\n=> TERMINATE";
+    let input = r"
+=> #Outro
+=><= #Outro
+=> END
+=> TERMINATE";
 
-    let expected = Dialogue::default();
+    let expected = Dialogue {
+        sections: vec![DialogueSection {
+            name: "Meta".to_string(),
+            pages: vec![DialoguePage {
+                lines: vec![
+                    DialogueLine::SectionJump("#Outro".to_string()),
+                    DialogueLine::SectionBounce("#Outro".to_string()),
+                    DialogueLine::EndJump,
+                    DialogueLine::TerminateJump,
+                ],
+            }],
+        }],
+        ..Default::default()
+    };
 
     let result = parse(input.to_string()).expect("Parse failed");
 
