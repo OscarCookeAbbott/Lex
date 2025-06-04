@@ -1,6 +1,9 @@
 #[cfg(test)]
 use crate::*;
 
+#[cfg(test)]
+use std::collections::HashMap;
+
 #[test]
 fn test_actor_with_properties() {
     let input = r"
@@ -80,7 +83,7 @@ $foo = 2";
             DialogueVariable::Number(1.0),
         )]),
         sections: vec![DialogueSection {
-            name: "Meta".to_string(),
+            name: META_SECTION_NAME.to_string(),
             pages: vec![DialoguePage {
                 lines: vec![DialogueLine::VariableAssign {
                     name: "foo".to_string(),
@@ -99,16 +102,41 @@ $foo = 2";
 
 #[test]
 fn test_function_lines() {
-    let input = r#"
+    let input = r"
 !example_function
-!example_function_args(arg_1: Some value, arg_2: Other value)
-!example_function_text: "Default return value""#;
+!example_function_args(arg_1=Some value, arg_2=123.456)
+!example_function_text: Default return value";
+
     let expected = Dialogue {
-        functions: vec![
-            "example_function".to_string(),
-            "example_function_args(arg_1: Some value, arg_2: Other value)".to_string(),
-            "example_function_text: \"Default return value\"".to_string(),
-        ],
+        functions: HashMap::from([
+            (
+                "example_function".to_string(),
+                DialogueFunction {
+                    args: None,
+                    result: None,
+                },
+            ),
+            (
+                "example_function_args".to_string(),
+                DialogueFunction {
+                    args: Some(HashMap::from([
+                        (
+                            "arg_1".to_string(),
+                            DialogueVariable::Text("Some value".to_string()),
+                        ),
+                        ("arg_2".to_string(), DialogueVariable::Number(123.456)),
+                    ])),
+                    result: None,
+                },
+            ),
+            (
+                "example_function_text".to_string(),
+                DialogueFunction {
+                    args: None,
+                    result: Some(DialogueVariable::Text("Default return value".to_string())),
+                },
+            ),
+        ]),
         ..Default::default()
     };
 
@@ -158,7 +186,7 @@ fn test_comments_and_logs() {
 
     let expected = Dialogue {
         sections: vec![DialogueSection {
-            name: "Meta".to_string(),
+            name: META_SECTION_NAME.to_string(),
             pages: vec![DialoguePage {
                 lines: vec![
                     DialogueLine::Comment("Comment".to_string()),
@@ -184,7 +212,7 @@ Other Oscar: Hi";
 
     let expected = Dialogue {
         sections: vec![DialogueSection {
-            name: "Meta".to_string(),
+            name: META_SECTION_NAME.to_string(),
             pages: vec![DialoguePage {
                 lines: vec![
                     DialogueLine::SpeakerText {
@@ -214,7 +242,7 @@ fn test_responses_and_nesting() {
 
     let expected = Dialogue {
         sections: vec![DialogueSection {
-            name: "Meta".to_string(),
+            name: META_SECTION_NAME.to_string(),
             pages: vec![DialoguePage {
                 lines: vec![
                     DialogueLine::Response {
@@ -246,7 +274,7 @@ fn test_manual_page_extension() {
 
     let expected = Dialogue {
         sections: vec![DialogueSection {
-            name: "Meta".to_string(),
+            name: META_SECTION_NAME.to_string(),
             pages: vec![DialoguePage {
                 lines: vec![
                     DialogueLine::Text("This is a single page".to_string()),
@@ -328,7 +356,7 @@ fn test_jumps() {
 
     let expected = Dialogue {
         sections: vec![DialogueSection {
-            name: "Meta".to_string(),
+            name: META_SECTION_NAME.to_string(),
             pages: vec![DialoguePage {
                 lines: vec![
                     DialogueLine::SectionJump("#Outro".to_string()),
