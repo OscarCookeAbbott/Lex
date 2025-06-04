@@ -5,7 +5,7 @@ use crate::*;
 use std::collections::HashMap;
 
 #[test]
-fn test_actor_with_properties() {
+fn test_actor_definitions() {
     let input = r"
 @Oscar
 full_name: Oscar Cooke-Abbott
@@ -34,7 +34,7 @@ age: 26";
 }
 
 #[test]
-fn test_variable_types() {
+fn test_variable_definitions() {
     let input = r"
 $example_text: This is some text
 $example_boolean: true
@@ -101,11 +101,12 @@ $foo = 2";
 }
 
 #[test]
-fn test_function_lines() {
+fn test_function_definitions() {
     let input = r"
 !example_function
+!example_function_result: Default return value
 !example_function_args(arg_1=Some value, arg_2=123.456)
-!example_function_text: Default return value";
+!example_function_args_result(arg_1=Some value, arg_2=123.456): Default return value";
 
     let expected = Dialogue {
         functions: HashMap::from([
@@ -114,6 +115,13 @@ fn test_function_lines() {
                 DialogueFunction {
                     args: None,
                     result: None,
+                },
+            ),
+            (
+                "example_function_result".to_string(),
+                DialogueFunction {
+                    args: None,
+                    result: Some(DialogueVariable::Text("Default return value".to_string())),
                 },
             ),
             (
@@ -130,9 +138,15 @@ fn test_function_lines() {
                 },
             ),
             (
-                "example_function_text".to_string(),
+                "example_function_args_result".to_string(),
                 DialogueFunction {
-                    args: None,
+                    args: Some(HashMap::from([
+                        (
+                            "arg_1".to_string(),
+                            DialogueVariable::Text("Some value".to_string()),
+                        ),
+                        ("arg_2".to_string(), DialogueVariable::Number(123.456)),
+                    ])),
                     result: Some(DialogueVariable::Text("Default return value".to_string())),
                 },
             ),
@@ -146,7 +160,7 @@ fn test_function_lines() {
 }
 
 #[test]
-fn test_sections() {
+fn test_section_definitons() {
     let input = r"
 #Intro
 Hello
@@ -205,12 +219,25 @@ fn test_comments_and_logs() {
 }
 
 #[test]
-fn test_speaker_lines() {
+fn test_spoken_dialogue() {
     let input = r"
+@Oscar
+name: Oscar
+
 @Oscar: Hello
 Other Oscar: Hi";
 
     let expected = Dialogue {
+        actors: HashMap::from([(
+            "oscar".to_string(),
+            DialogueActor {
+                name: "Oscar".to_string(),
+                properties: std::collections::HashMap::from([(
+                    "name".to_string(),
+                    DialogueVariable::Text("Oscar".to_string()),
+                )]),
+            },
+        )]),
         sections: vec![DialogueSection {
             name: META_SECTION_NAME.to_string(),
             pages: vec![DialoguePage {
@@ -265,7 +292,7 @@ fn test_responses_and_nesting() {
 }
 
 #[test]
-fn test_manual_page_extension() {
+fn test_manual_page_extensions() {
     let input = r"
 | This is a single page
 |
@@ -347,7 +374,7 @@ Each
 }
 
 #[test]
-fn test_jumps() {
+fn test_jumps_and_bounces() {
     let input = r"
 => #Outro
 =><= #Outro
@@ -375,7 +402,7 @@ fn test_jumps() {
 }
 
 #[test]
-fn test_variable_and_property_references() {
+fn test_data_references() {
     let input = "This is a variable: {$var}. This is a property: {@actor.prop}.";
 
     let expected = Dialogue::default();

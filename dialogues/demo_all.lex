@@ -8,7 +8,7 @@ $example_number: 123.456
 $example_array: [This is an entry, This is also an entry]
 
 !example_function
-!example_functions_args(arg_1: Some value, arg_2: Other value)
+!example_functions_args(arg_1=Some value, arg_2=Other value)
 !example_function_text: "Default return value"
 
 

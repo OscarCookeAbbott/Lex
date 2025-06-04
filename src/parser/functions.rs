@@ -19,6 +19,8 @@ pub fn parse(from: String) -> Result<Dialogue, ParseError> {
     let mut lines = from.lines().peekable();
 
     while let Some(line) = lines.next() {
+        let line = line.trim();
+
         // Create new page on empty line if current not empty
         if line.trim().is_empty() {
             commit_page(&mut current_section, &mut current_page);
@@ -28,8 +30,7 @@ pub fn parse(from: String) -> Result<Dialogue, ParseError> {
 
         // Check for new section
         if let Some(section_name) = line.strip_prefix('#') {
-            let section_name = section_name.trim().to_string();
-
+            let section_name = section_name.trim_start();
             commit_page(&mut current_section, &mut current_page);
 
             // If the current section has pages, push it to the dialogue
@@ -39,7 +40,7 @@ pub fn parse(from: String) -> Result<Dialogue, ParseError> {
 
             // Start a new section
             current_section = DialogueSection {
-                name: section_name,
+                name: section_name.to_string(),
                 pages: Vec::new(),
             };
 
@@ -50,15 +51,14 @@ pub fn parse(from: String) -> Result<Dialogue, ParseError> {
         if let Some(actor_definition) = line.strip_prefix('@') {
             // Ensure not parsing a spoken line
             if actor_definition.split_once(':').is_none() {
-                let actor_name = actor_definition.trim().to_string();
+                let actor_name = actor_definition.trim_start();
                 let mut properties = HashMap::new();
 
                 // Sub-iterate over subsequent lines
                 while let Some(&next_line) = lines.peek() {
-                    // End actor definition parsing on new pages
                     if next_line.trim().is_empty()
-                        || next_line.strip_prefix('@').is_some()
-                        || next_line.strip_prefix('#').is_some()
+                        || next_line.starts_with('@')
+                        || next_line.starts_with('#')
                     {
                         break;
                     }
@@ -69,17 +69,15 @@ pub fn parse(from: String) -> Result<Dialogue, ParseError> {
                     else {
                         break;
                     };
-
-                    let property_name = property_name.trim().to_lowercase();
+                    let property_name = property_name.trim();
                     let property_value = parse_variable_value(property_value_raw.trim());
-
-                    properties.insert(property_name, property_value);
+                    properties.insert(property_name.to_lowercase(), property_value);
                 }
 
                 dialogue.actors.insert(
                     actor_name.to_lowercase(),
                     DialogueActor {
-                        name: actor_name,
+                        name: actor_name.to_string(),
                         properties,
                     },
                 );
@@ -101,6 +99,7 @@ pub fn parse(from: String) -> Result<Dialogue, ParseError> {
     Ok(dialogue)
 }
 
+#[inline]
 fn parse_line(line: &str, dialogue: &mut Dialogue) -> Option<DialogueLine> {
     let mut line = line.trim();
 
@@ -141,24 +140,22 @@ fn parse_line(line: &str, dialogue: &mut Dialogue) -> Option<DialogueLine> {
     // Check for functions
     // `!function_name` or `!function_name()` or `!function_name(arg1, ...)` or `!function_name: {default_return_value}` etc
     if let Some(function_definition) = line.strip_prefix('!') {
-        let mut function_text = function_definition.trim().to_string();
+        let mut function_text = function_definition;
 
         let mut function_args = None;
         let mut function_result = None;
 
         // Check for return value
         if let Some((function_signature, return_value)) = function_text.split_once(':') {
-            let function_text_trimmed = function_signature.trim().to_string();
             let return_value = return_value.trim();
 
             function_result = Some(parse_variable_value(return_value));
 
-            function_text = function_text_trimmed;
+            function_text = function_signature;
         }
 
         // Check for arguments
         if let Some((function_name, arg_definitions)) = function_text.split_once('(') {
-            let function_name_trimmed = function_name.trim().to_lowercase();
             let args = arg_definitions.trim_end_matches(')').trim();
 
             // Parse arguments if any
@@ -178,7 +175,7 @@ fn parse_line(line: &str, dialogue: &mut Dialogue) -> Option<DialogueLine> {
                 None
             };
 
-            function_text = function_name_trimmed;
+            function_text = function_name;
         }
 
         let function_name = function_text.trim().to_lowercase();
@@ -199,11 +196,11 @@ fn parse_line(line: &str, dialogue: &mut Dialogue) -> Option<DialogueLine> {
         // Check for variable definition
         // `$variable_name: value`
         if let Some((name, value)) = line.split_once(':') {
-            let variable_name = name.trim().to_lowercase();
+            let variable_name = name.trim();
             let variable_value = value.trim();
 
             dialogue.variables.insert(
-                variable_name.trim().to_string(),
+                variable_name.to_lowercase(),
                 parse_variable_value(variable_value),
             );
 
@@ -213,15 +210,17 @@ fn parse_line(line: &str, dialogue: &mut Dialogue) -> Option<DialogueLine> {
         // Check for variable assign
         // `$variable_name = value`
         if let Some((name_and_op, value)) = line.split_once('=') {
-            let variable_name = name_and_op.trim().to_lowercase();
+            let variable_name = name_and_op.trim();
             let variable_value = value.trim();
-
-            if !dialogue.variables.contains_key(&variable_name) {
-                println!("WARNING: Static variable definition not found [{variable_name}]");
+            if !dialogue
+                .variables
+                .contains_key(&variable_name.to_lowercase())
+            {
+                eprintln!("WARNING: Static variable definition not found [{variable_name}]");
             }
 
             return Some(DialogueLine::VariableAssign {
-                name: variable_name,
+                name: variable_name.to_lowercase(),
                 value: parse_variable_value(variable_value),
             });
         }
@@ -245,40 +244,37 @@ fn parse_line(line: &str, dialogue: &mut Dialogue) -> Option<DialogueLine> {
     // Check for section jump
     // `=> jump_section`
     if let Some(jump_section) = line.strip_prefix("=>") {
-        let jump_section = jump_section.trim().to_string();
-
-        if jump_section.to_lowercase() == "end" {
-            return Some(DialogueLine::EndJump);
+        let jump_section = jump_section.trim();
+        match jump_section.to_lowercase().as_str() {
+            "end" => return Some(DialogueLine::EndJump),
+            "terminate" => return Some(DialogueLine::TerminateJump),
+            _ => return Some(DialogueLine::SectionJump(jump_section.to_string())),
         }
-
-        if jump_section.to_lowercase() == "terminate" {
-            return Some(DialogueLine::TerminateJump);
-        }
-
-        return Some(DialogueLine::SectionJump(jump_section));
     }
 
     // Check for speaker line
     // `speaker_id: text` or `@spaker_id: text`
     if let Some((speaker, text)) = line.split_once(':') {
-        // Check if speaker is anonymous
+        let speaker = speaker.trim();
+        let text = text.trim();
+
+        // Check if anonymous
         let Some(speaker_id) = speaker.strip_prefix('@') else {
             return Some(DialogueLine::SpeakerText {
-                speaker: speaker.trim().to_string(),
-                text: text.trim().to_string(),
+                speaker: speaker.to_string(),
+                text: text.to_string(),
             });
         };
 
-        let speaker_id = speaker_id.trim().to_lowercase();
-        let text = text.trim().to_string();
+        let speaker_id = speaker_id.trim();
 
-        if !dialogue.actors.contains_key(speaker_id.as_str()) {
-            println!("WARNING: Actor definition not found ({})", speaker_id)
+        if !dialogue.actors.contains_key(&speaker_id.to_lowercase()) {
+            eprintln!("WARNING: Actor definition not found ({})", speaker_id);
         }
 
         return Some(DialogueLine::SpeakerText {
-            speaker: speaker_id,
-            text,
+            speaker: speaker_id.to_lowercase(),
+            text: text.to_string(),
         });
     }
 
@@ -314,6 +310,7 @@ fn parse_variable_value(from: &str) -> DialogueVariable {
     DialogueVariable::Text(from.to_string())
 }
 
+#[inline]
 fn commit_page(current_section: &mut DialogueSection, current_page: &mut DialoguePage) {
     if !current_page.lines.is_empty() {
         current_section.pages.push(std::mem::replace(
