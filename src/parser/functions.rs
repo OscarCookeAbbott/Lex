@@ -258,24 +258,26 @@ fn parse_line(line: &str, dialogue: &mut Dialogue) -> Option<DialogueLine> {
         let speaker = speaker.trim();
         let text = text.trim();
 
-        // Check if anonymous
-        let Some(speaker_id) = speaker.strip_prefix('@') else {
+        if !text.is_empty() {
+            // Check if anonymous
+            let Some(speaker_id) = speaker.strip_prefix('@') else {
+                return Some(DialogueLine::SpeakerText {
+                    speaker: speaker.to_string(),
+                    text: text.to_string(),
+                });
+            };
+
+            let speaker_id = speaker_id.trim();
+
+            if !dialogue.actors.contains_key(&speaker_id.to_lowercase()) {
+                eprintln!("WARNING: Actor definition not found ({})", speaker_id);
+            }
+
             return Some(DialogueLine::SpeakerText {
-                speaker: speaker.to_string(),
+                speaker: speaker_id.to_lowercase(),
                 text: text.to_string(),
             });
-        };
-
-        let speaker_id = speaker_id.trim();
-
-        if !dialogue.actors.contains_key(&speaker_id.to_lowercase()) {
-            eprintln!("WARNING: Actor definition not found ({})", speaker_id);
         }
-
-        return Some(DialogueLine::SpeakerText {
-            speaker: speaker_id.to_lowercase(),
-            text: text.to_string(),
-        });
     }
 
     // Default to basic text line. Any failed parsing will be visible and thus obvious in testing.
