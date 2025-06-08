@@ -4,7 +4,7 @@ use std::collections::HashMap;
 pub struct Dialogue {
     // Metadata
     pub actors: HashMap<String, DialogueActor>,
-    pub variables: HashMap<String, DialogueVariable>,
+    pub variables: HashMap<String, DialogueValue>,
     pub functions: HashMap<String, DialogueFunction>,
 
     // Content
@@ -14,33 +14,19 @@ pub struct Dialogue {
 #[derive(Default, Clone, Debug, PartialEq)]
 pub struct DialogueSection {
     pub name: String,
-    pub pages: Vec<DialoguePage>,
+    pub steps: Vec<DialogueStep>,
 }
 
-#[derive(Default, Clone, Debug, PartialEq)]
-pub struct DialoguePage {
-    pub lines: Vec<DialogueLine>,
-}
-
-/// Describes the content of a given line of dialogue.
 #[derive(Clone, Debug, PartialEq)]
-pub enum DialogueLine {
+pub enum DialogueStep {
     Comment(String),
     LogInfo(String),
     LogWarning(String),
     LogError(String),
-    Text(String),
-    SpeakerText {
-        speaker: String,
-        text: String,
-    },
-    Response {
-        text: String,
-        pages: Vec<DialoguePage>,
-    },
+    Page(Vec<DialogueLine>),
     VariableAssign {
         name: String,
-        value: DialogueVariable,
+        value: DialogueValue,
     },
     SectionBounce(String),
     SectionJump(String),
@@ -48,8 +34,22 @@ pub enum DialogueLine {
     TerminateJump,
 }
 
+/// Describes the content of a given line of dialogue.
 #[derive(Clone, Debug, PartialEq)]
-pub enum DialogueVariable {
+pub enum DialogueLine {
+    Text(String),
+    SpeakerText {
+        speaker: String,
+        text: String,
+    },
+    Response {
+        text: String,
+        pages: Vec<DialogueStep>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum DialogueValue {
     Text(String),
     Number(f64),
     Boolean(bool),
@@ -58,12 +58,12 @@ pub enum DialogueVariable {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DialogueFunction {
-    pub args: Option<HashMap<String, DialogueVariable>>,
-    pub result: Option<DialogueVariable>,
+    pub args: Option<HashMap<String, DialogueValue>>,
+    pub result: Option<DialogueValue>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DialogueActor {
     pub name: String,
-    pub properties: HashMap<String, DialogueVariable>,
+    pub properties: HashMap<String, DialogueValue>,
 }
