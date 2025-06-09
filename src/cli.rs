@@ -1,7 +1,9 @@
 //! Command line interface for the Lex dialogue syntax parser, converter and player.
 
 use crate::{parse, play};
+use base64::Engine;
 use clap::{Parser, Subcommand};
+use serde_pickle::SerOptions;
 
 /// Dialogue Syntax CLI
 #[derive(Parser)]
@@ -26,7 +28,7 @@ pub enum Commands {
     /// Convert the parsed dialogue to a specific format
     Convert {
         /// Output format (json, yaml, etc)
-        #[arg(short, long, default_value = "json")]
+        #[arg(short, long)]
         format: String,
 
         /// Output file path (default: stdout)
@@ -57,7 +59,14 @@ pub fn execute() {
 
         Some(Commands::Convert { format, path }) => {
             let output = match format.as_str() {
-                "json" => Some(serde_json::to_string_pretty(&dialogue).unwrap().to_string()),
+                "json" => Some(serde_json::to_string_pretty(&dialogue).unwrap()),
+                "yaml" => Some(serde_yaml::to_string(&dialogue).unwrap()),
+                "ron" => Some(ron::to_string(&dialogue).unwrap()),
+                "toml" => Some(toml::to_string_pretty(&dialogue).unwrap()),
+                "pickle" => Some({
+                    let bytes = serde_pickle::to_vec(&dialogue, SerOptions::default()).unwrap();
+                    base64::prelude::BASE64_STANDARD.encode(bytes)
+                }),
                 _ => None,
             };
 
