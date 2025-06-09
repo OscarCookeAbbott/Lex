@@ -1,3 +1,5 @@
+//! Player module for interactive dialogue playback.
+
 use crate::{Dialogue, DialogueLine, DialogueSection, DialogueStep};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -6,6 +8,7 @@ struct DialogueState {
     step: DialogueStep,
 }
 
+/// Plays back a dialogue interactively using basic CLI.
 pub fn play(mut dialogue: Dialogue) {
     let first_section = dialogue
         .sections
@@ -15,7 +18,7 @@ pub fn play(mut dialogue: Dialogue) {
     let first_step = first_section
         .steps
         .first()
-        .expect("No pages found in section");
+        .expect("No pages found in first section");
 
     let first_state = DialogueState {
         section: first_section.clone(),
@@ -25,7 +28,7 @@ pub fn play(mut dialogue: Dialogue) {
     let mut dialogue_stack = vec![first_state];
 
     while let Some(current_state) = dialogue_stack.pop() {
-        let mut new_state = None;
+        let mut next_state = None;
 
         match &current_state.step {
             DialogueStep::Comment(_) => {}
@@ -42,52 +45,14 @@ pub fn play(mut dialogue: Dialogue) {
                 eprintln!("{text}");
             }
 
-            DialogueStep::SectionJump(section_name) => {
-                let Some(new_section) = dialogue.sections.iter().find(|s| s.name == *section_name)
-                else {
-                    eprintln!("Section not found: {section_name}");
-                    continue;
-                };
-
-                let Some(new_page) = new_section.steps.first() else {
-                    eprintln!("Section has no pages: {section_name}");
-                    continue;
-                };
-
-                new_state = Some(DialogueState {
-                    section: new_section.clone(),
-                    step: new_page.clone(),
-                });
-            }
-
-            DialogueStep::SectionBounce(section_name) => {
-                let Some(new_section) = dialogue.sections.iter().find(|s| s.name == *section_name)
-                else {
-                    eprintln!("Section not found: {section_name}");
-                    continue;
-                };
-
-                let Some(new_page) = new_section.steps.first() else {
-                    eprintln!("Section has no pages: {section_name}");
-                    continue;
-                };
-
-                if let Some(new_step) = find_next_state(&current_state, &dialogue) {
-                    dialogue_stack.push(new_step);
+            DialogueStep::VariableAssign { name, value } => {
+                if dialogue.variables.contains_key(name) {
+                    dialogue.variables.remove(name);
+                } else {
+                    eprintln!("Variable assignment not pre-existing: {name}");
                 }
 
-                new_state = Some(DialogueState {
-                    section: new_section.clone(),
-                    step: new_page.clone(),
-                });
-            }
-
-            DialogueStep::EndJump => {
-                continue;
-            }
-
-            DialogueStep::TerminateJump => {
-                break;
+                dialogue.variables.insert(name.clone(), value.clone());
             }
 
             DialogueStep::Page(lines) => {
@@ -113,32 +78,46 @@ pub fn play(mut dialogue: Dialogue) {
                 println!("{output}");
             }
 
-            DialogueStep::VariableAssign { name, value } => {
-                if dialogue.variables.contains_key(name) {
-                    dialogue.variables.remove(name);
-                } else {
-                    eprintln!("Variable assignment not pre-existing: {name}");
-                }
+            DialogueStep::SectionJump(section_name) => {
+                next_state = get_section_state_by_name(section_name, &dialogue);
+            }
 
-                dialogue.variables.insert(name.clone(), value.clone());
+            DialogueStep::SectionBounce(section_name) => {
+                next_state = get_section_state_by_name(section_name, &dialogue);
+
+                if next_state.is_some() {
+                    if let Some(next_step) = get_next_step_state(&current_state, &dialogue) {
+                        dialogue_stack.push(next_step);
+                    }
+                }
+            }
+
+            DialogueStep::EndJump => {
+                continue;
+            }
+
+            DialogueStep::TerminateJump => {
+                break;
             }
         }
 
         // Simulate line playback
         std::thread::sleep(std::time::Duration::from_millis(500));
 
-        let next_state = new_state.or(find_next_state(&current_state, &dialogue));
-
-        if let Some(new_state) = next_state {
-            dialogue_stack.push(new_state);
+        if let Some(next_state) = next_state.or_else(|| get_next_step_state(&current_state, &dialogue)) {
+            dialogue_stack.push(next_state);
         }
     }
 
     println!("Playback completed.");
 }
 
-fn find_next_state(current_state: &DialogueState, dialogue: &Dialogue) -> Option<DialogueState> {
-    // Move to the next step if it exists
+/// Gets the next sequential step in the dialogue as a state, if it exists.
+fn get_next_step_state(
+    current_state: &DialogueState,
+    dialogue: &Dialogue,
+) -> Option<DialogueState> {
+    // Move to the current section's next step if it exists
     if let Some(next_step) = current_state
         .section
         .steps
@@ -152,7 +131,7 @@ fn find_next_state(current_state: &DialogueState, dialogue: &Dialogue) -> Option
         });
     }
 
-    // Move to the next section if it exists
+    // Move to the subsequent section if it exists
     if let Some(next_section) = dialogue
         .sections
         .iter()
@@ -166,4 +145,21 @@ fn find_next_state(current_state: &DialogueState, dialogue: &Dialogue) -> Option
     }
 
     None
+}
+
+fn get_section_state_by_name(section_name: &str, dialogue: &Dialogue) -> Option<DialogueState> {
+    let Some(new_section) = dialogue.sections.iter().find(|s| s.name == *section_name) else {
+        eprintln!("Section not found: {section_name}");
+        return None;
+    };
+
+    let Some(new_page) = new_section.steps.first() else {
+        eprintln!("Section has no pages: {section_name}");
+        return None;
+    };
+
+    Some(DialogueState {
+        section: new_section.clone(),
+        step: new_page.clone(),
+    })
 }
