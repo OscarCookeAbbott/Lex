@@ -1,5 +1,7 @@
 use super::*;
 use std::collections::*;
+use std::iter::Peekable;
+use std::str::Lines;
 use std::string::*;
 
 /// Parses the given dialogue string into a dialogue data structure, if possible.
@@ -36,48 +38,13 @@ pub fn parse(from: String) -> Result<Dialogue, ParseError> {
             continue;
         }
 
-        // Check for actor definition
-        if let Some(actor_definition) = line.strip_prefix('@') {
-            // Ensure not parsing a spoken line
-            if actor_definition.split_once(':').is_none() {
-                let actor_name = actor_definition.trim_start();
-                let mut properties = HashMap::new();
-
-                // Sub-iterate over subsequent lines
-                while let Some(&next_line) = lines.peek() {
-                    // If we hit a new step, break out of the sub-iteration
-                    if is_new_step(next_line) {
-                        break;
-                    }
-
-                    // Parse the next line as a property, skip sub-iteration if not possible
-                    let Some((property_name, property_value_raw)) =
-                        lines.next().and_then(|line| line.split_once(':'))
-                    else {
-                        break;
-                    };
-
-                    let property_name = property_name.trim().to_lowercase();
-                    let property_value = parse_variable_value(property_value_raw.trim());
-
-                    properties.insert(property_name, property_value);
-                }
-
-                let display_name = match properties.get("name") {
-                    Some(DialogueValue::Text(override_name)) => override_name,
-                    _ => actor_name,
-                };
-
-                dialogue.actors.insert(
-                    actor_name.to_lowercase(),
-                    DialogueActor {
-                        name: display_name.to_string(),
-                        properties,
-                    },
-                );
-
-                continue;
-            }
+        // Actor definition
+        // `@actor_name:
+        // property_name: value
+        // ...`
+        if let Some((actor_id, actor)) = parse_actor_definition(line, &mut lines) {
+            dialogue.actors.insert(actor_id, actor);
+            continue;
         }
 
         // Check for info log
@@ -122,54 +89,8 @@ pub fn parse(from: String) -> Result<Dialogue, ParseError> {
 
         // Function definition
         // `!function_name` or `!function_name()` or `!function_name(arg1, ...)` or `!function_name: {default_return_value}` etc
-        if let Some(function_definition) = line.strip_prefix('!') {
-            let mut function_text = function_definition;
-
-            let mut function_args = None;
-            let mut function_result = None;
-
-            // Check for return value
-            if let Some((function_signature, return_value)) = function_text.split_once(':') {
-                let return_value = return_value.trim();
-
-                function_result = Some(parse_variable_value(return_value));
-
-                function_text = function_signature;
-            }
-
-            // Check for arguments
-            if let Some((function_name, arg_definitions)) = function_text.split_once('(') {
-                let args = arg_definitions.trim_end_matches(')').trim();
-
-                // Parse arguments if any
-                function_args = if !args.is_empty() {
-                    Some(
-                        args.split(',')
-                            .map(|arg| {
-                                let mut parts = arg.splitn(2, '=');
-                                let name = parts.next().unwrap().trim().to_string();
-                                let value = parts.next().unwrap_or("").trim();
-
-                                (name, parse_variable_value(value))
-                            })
-                            .collect(),
-                    )
-                } else {
-                    None
-                };
-
-                function_text = function_name;
-            }
-
-            let function_name = function_text.trim().to_lowercase();
-
-            let new_function = DialogueFunction {
-                args: function_args,
-                result: function_result,
-            };
-
-            dialogue.functions.insert(function_name, new_function);
-
+        if let Some((function_id, function)) = parse_function_definition(line) {
+            dialogue.functions.insert(function_id, function);
             continue;
         }
 
@@ -179,7 +100,7 @@ pub fn parse(from: String) -> Result<Dialogue, ParseError> {
             line.strip_prefix('$').and_then(|line| line.split_once(':'))
         {
             let variable_name = variable_name.trim().to_lowercase();
-            let variable_value = parse_variable_value(variable_value.trim());
+            let variable_value = parse_value(variable_value.trim());
 
             dialogue.variables.insert(variable_name, variable_value);
 
@@ -192,7 +113,7 @@ pub fn parse(from: String) -> Result<Dialogue, ParseError> {
             line.strip_prefix('$').and_then(|line| line.split_once('='))
         {
             let variable_name = variable_name.trim();
-            let variable_value = parse_variable_value(variable_value.trim());
+            let variable_value = parse_value(variable_value.trim());
 
             if !dialogue.variables.contains_key(variable_name) {
                 eprintln!("WARNING: Static variable definition not found [{variable_name}]");
@@ -234,23 +155,10 @@ pub fn parse(from: String) -> Result<Dialogue, ParseError> {
             continue;
         }
 
-        // Parse as page
-        let mut page_lines = Vec::new();
-        let mut current_line = Some(line);
-
-        while let Some(line) = current_line {
-            page_lines.push(parse_text_line(line, &dialogue));
-
-            current_line = match lines.peek() {
-                Some(next_line) if !is_new_step(next_line) => lines.next(),
-                _ => None,
-            };
-        }
-
-        if !page_lines.is_empty() {
-            let new_step = DialogueStep::Page(page_lines);
-
-            current_section.steps.push(new_step);
+        // Default to display text parsing
+        if let Some(new_page) = parse_page(line, &mut lines, &dialogue) {
+            current_section.steps.push(new_page);
+            continue;
         }
     }
 
@@ -261,8 +169,8 @@ pub fn parse(from: String) -> Result<Dialogue, ParseError> {
     Ok(dialogue)
 }
 
-/// Converts the given string into a `DialogueVariable`, as a boolean, number, array or otherwise text.
-fn parse_variable_value(from: &str) -> DialogueValue {
+/// Converts the given string into a dialogue value type.
+fn parse_value(from: &str) -> DialogueValue {
     // Check for boolean value
     if let Ok(bool_value) = str::parse::<bool>(from) {
         return DialogueValue::Boolean(bool_value);
@@ -291,17 +199,134 @@ fn parse_variable_value(from: &str) -> DialogueValue {
 
 #[inline]
 fn is_new_step(line: &str) -> bool {
-    line.is_empty()
-        || line.starts_with("//")
-        || line.starts_with("///")
-        || line.starts_with("//!")
-        || line.starts_with("//?")
-        || line.starts_with('@')
-        || line.starts_with('#')
-        || line.starts_with('!')
-        || line.starts_with('$')
-        || line.starts_with("=><=")
-        || line.starts_with("=>")
+    let checks = ["//", "///", "//!", "//?", "@", "#", "!", "$", "=><=", "=>"];
+
+    if line.is_empty() {
+        return true;
+    }
+
+    checks.iter().any(|&check| line.starts_with(check))
+}
+
+fn parse_actor_definition(
+    line: &str,
+    lines: &mut Peekable<Lines>,
+) -> Option<(String, DialogueActor)> {
+    let actor_definition = line.strip_prefix('@')?;
+
+    // Ensure not parsing a spoken line
+    if actor_definition.split_once(':').is_some() {
+        return None;
+    }
+
+    let actor_name = actor_definition.trim();
+    let mut properties = HashMap::new();
+
+    // Sub-iterate over subsequent lines
+    while let Some(&next_line) = lines.peek() {
+        // If we hit a new step, break out of the sub-iteration
+        if is_new_step(next_line) {
+            break;
+        }
+
+        // Parse the next line as a property, cancel sub-iteration if not possible
+        let Some((property_name, property_value_raw)) =
+            lines.next().and_then(|line| line.split_once(':'))
+        else {
+            break;
+        };
+
+        let property_name = property_name.trim().to_lowercase();
+        let property_value = parse_value(property_value_raw.trim());
+
+        properties.insert(property_name, property_value);
+    }
+
+    let display_name = match properties.get("name") {
+        Some(DialogueValue::Text(override_name)) => override_name.as_str(),
+        _ => actor_name,
+    };
+
+    Some((
+        actor_name.to_lowercase(),
+        DialogueActor {
+            name: display_name.to_string(),
+            properties,
+        },
+    ))
+}
+
+fn parse_function_definition(line: &str) -> Option<(String, DialogueFunction)> {
+    let function_definition = line.strip_prefix('!')?;
+
+    let mut function_text = function_definition;
+
+    let mut args = None;
+    let mut result = None;
+
+    // Check for result
+    if let Some((function_signature, return_value)) = function_text.split_once(':') {
+        let return_value = return_value.trim();
+
+        result = Some(parse_value(return_value));
+
+        function_text = function_signature;
+    }
+
+    // Check for arguments
+    if let Some((function_name, arg_definitions)) = function_text.split_once('(') {
+        let arg_definitions = arg_definitions.trim_end_matches(')').trim();
+
+        // Parse arguments if any
+        args = if !arg_definitions.is_empty() {
+            Some(
+                arg_definitions
+                    .split(',')
+                    .map(|arg| {
+                        let mut parts = arg.splitn(2, '=');
+                        let name = parts.next().unwrap().trim().to_string();
+                        let value = parts.next().unwrap_or("").trim();
+
+                        (name, parse_value(value))
+                    })
+                    .collect(),
+            )
+        } else {
+            None
+        };
+
+        function_text = function_name;
+    }
+
+    let function_name = function_text.trim().to_lowercase();
+
+    let new_function = DialogueFunction { args, result };
+
+    Some((function_name, new_function))
+}
+
+fn parse_page(
+    line: &str,
+    lines: &mut Peekable<Lines>,
+    dialogue: &Dialogue,
+) -> Option<DialogueStep> {
+    let mut page_lines = Vec::new();
+
+    page_lines.push(parse_text_line(line, dialogue));
+
+    while let Some(&next_line) = lines.peek() {
+        if is_new_step(next_line) {
+            break;
+        }
+
+        page_lines.push(parse_text_line(lines.next().unwrap(), dialogue));
+    }
+
+    if page_lines.is_empty() {
+        return None;
+    }
+
+    Some(DialogueStep::Page(page_lines))
 }
 
 fn parse_text_line(line: &str, dialogue: &Dialogue) -> DialogueLine {

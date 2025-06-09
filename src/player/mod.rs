@@ -117,8 +117,6 @@ pub fn play(mut dialogue: Dialogue) {
                             .get(speaker)
                             .map_or(speaker, |actor| &actor.name);
 
-                        println!("Speaker: {}", speaker);
-
                         format!("{speaker_name}: {text}")
                     }
 
