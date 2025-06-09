@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-#[derive(Default, Clone, Debug, PartialEq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Default, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Dialogue {
     // Metadata
     pub actors: HashMap<String, DialogueActor>,
@@ -11,13 +13,13 @@ pub struct Dialogue {
     pub sections: Vec<DialogueSection>,
 }
 
-#[derive(Default, Clone, Debug, PartialEq)]
+#[derive(Default, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DialogueSection {
     pub name: String,
     pub steps: Vec<DialogueStep>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum DialogueStep {
     Comment(String),
     LogInfo(String),
@@ -35,7 +37,7 @@ pub enum DialogueStep {
 }
 
 /// Describes the content of a given line of dialogue.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum DialogueLine {
     Text(String),
     SpeakerText {
@@ -48,7 +50,7 @@ pub enum DialogueLine {
     },
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum DialogueValue {
     Text(String),
     Number(f64),
@@ -56,13 +58,13 @@ pub enum DialogueValue {
     Array(Vec<String>),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DialogueFunction {
     pub args: Option<HashMap<String, DialogueValue>>,
     pub result: Option<DialogueValue>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DialogueActor {
     pub name: String,
     pub properties: HashMap<String, DialogueValue>,

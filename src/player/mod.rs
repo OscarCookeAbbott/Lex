@@ -7,23 +7,6 @@ struct DialogueState {
 }
 
 pub fn play(mut dialogue: Dialogue) {
-    println!("\nPlaying dialogue:");
-
-    println!("\nActors:");
-    for (actor_id, actor) in &dialogue.actors {
-        println!("{actor_id}: {actor:?}");
-    }
-
-    println!("\nVariables:");
-    for (variable_name, variable_value) in &dialogue.variables {
-        println!("{variable_name}: {variable_value:?}");
-    }
-
-    println!("\nFunctions:");
-    for function_name in &dialogue.functions {
-        println!("{function_name:?}");
-    }
-
     let first_section = dialogue
         .sections
         .first()
