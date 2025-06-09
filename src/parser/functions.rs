@@ -39,7 +39,7 @@ pub fn parse(from: String) -> Result<Dialogue, ParseError> {
         }
 
         // Actor definition
-        // `@actor_name:
+        // `@actor_name
         // property_name: value
         // ...`
         if let Some((actor_id, actor)) = parse_actor_definition(line, &mut lines) {
