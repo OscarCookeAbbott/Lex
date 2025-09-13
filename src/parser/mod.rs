@@ -1,5 +1,6 @@
 mod config;
 mod functions;
+mod syntax;
 mod tests;
 mod types;
 

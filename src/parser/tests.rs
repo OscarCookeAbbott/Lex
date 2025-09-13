@@ -4,6 +4,15 @@ use crate::*;
 #[cfg(test)]
 use std::collections::HashMap;
 
+/// Helper function for tests - extracts dialogue from ParseResult and panics on warnings
+fn parse_test_helper(input: &str) -> super::types::Dialogue {
+    let result = super::functions::parse(input.to_string());
+    if !result.warnings.is_empty() {
+        panic!("Unexpected warnings: {:?}", result.warnings);
+    }
+    result.dialogue
+}
+
 #[test]
 fn test_actor_definitions() {
     let input = r"
@@ -28,7 +37,7 @@ age: 26";
         ..Default::default()
     };
 
-    let result = parse(input.to_string()).expect("Parse failed");
+    let result = parse_test_helper(input);
 
     assert_eq!(result.actors, expected.actors);
 }
@@ -60,7 +69,7 @@ $example_array: [This is an entry, This is also an entry]";
         ..Default::default()
     };
 
-    let result = parse(input.to_string()).expect("Parse failed");
+    let result = parse_test_helper(input);
 
     assert_eq!(result.variables, expected.variables);
 }
@@ -87,7 +96,7 @@ $foo = 2";
         ..Default::default()
     };
 
-    let result = parse(input.to_string()).expect("Parse failed");
+    let result = parse_test_helper(input);
 
     assert_eq!(result.variables, expected.variables);
     assert_eq!(result.sections, expected.sections);
@@ -147,7 +156,7 @@ fn test_function_definitions() {
         ..Default::default()
     };
 
-    let result = parse(input.to_string()).expect("Parse failed");
+    let result = parse_test_helper(input);
 
     assert_eq!(result.functions, expected.functions);
 }
@@ -178,7 +187,7 @@ Goodbye";
         ..Default::default()
     };
 
-    let result = parse(input.to_string()).expect("Parse failed");
+    let result = parse_test_helper(input);
 
     assert_eq!(result.sections, expected.sections);
 }
@@ -204,7 +213,7 @@ fn test_comments_and_logs() {
         ..Default::default()
     };
 
-    let result = parse(input.to_string()).expect("Parse failed");
+    let result = parse_test_helper(input);
 
     assert_eq!(result, expected);
 }
@@ -245,7 +254,7 @@ Other Oscar: Hi";
         ..Default::default()
     };
 
-    let result = parse(input.to_string()).expect("Parse failed");
+    let result = parse_test_helper(input);
 
     assert_eq!(result, expected);
 }
@@ -273,7 +282,7 @@ fn test_responses_and_nesting() {
         ..Default::default()
     };
 
-    let result = parse(input.to_string()).expect("Parse failed");
+    let result = parse_test_helper(input);
 
     assert_eq!(result.sections, expected.sections);
 }
@@ -304,7 +313,7 @@ fn test_manual_page_extensions() {
         ..Default::default()
     };
 
-    let result = parse(input.to_string()).expect("Parse failed");
+    let result = parse_test_helper(input);
 
     assert_eq!(result, expected);
 }
@@ -317,7 +326,7 @@ This is annotated.";
 
     let expected = Dialogue::default();
 
-    let result = parse(input.to_string()).expect("Parse failed");
+    let result = parse_test_helper(input);
 
     assert_eq!(result, expected);
 }
@@ -333,7 +342,7 @@ Other
 
     let expected = Dialogue::default();
 
-    let result = parse(input.to_string()).expect("Parse failed");
+    let result = parse_test_helper(input);
 
     assert_eq!(result, expected);
 }
@@ -353,7 +362,7 @@ Each
 
     let expected = Dialogue::default();
 
-    let result = parse(input.to_string()).expect("Parse failed");
+    let result = parse_test_helper(input);
 
     assert_eq!(result, expected);
 }
@@ -379,7 +388,7 @@ fn test_jumps_and_bounces() {
         ..Default::default()
     };
 
-    let result = parse(input.to_string()).expect("Parse failed");
+    let result = parse_test_helper(input);
 
     assert_eq!(result, expected);
 }
@@ -390,7 +399,7 @@ fn test_data_references() {
 
     let expected = Dialogue::default();
 
-    let result = parse(input.to_string()).expect("Parse failed");
+    let result = parse_test_helper(input);
 
     assert_eq!(result, expected);
 }
@@ -401,7 +410,7 @@ fn test_rich_text() {
 
     let expected = Dialogue::default();
 
-    let result = parse(input.to_string()).expect("Parse failed");
+    let result = parse_test_helper(input);
 
     assert_eq!(result, expected);
 }

@@ -45,16 +45,24 @@ pub fn execute() {
 
     let start = std::time::Instant::now();
 
-    let dialogue = parse(raw_dialogue).expect("Parsing failed");
+    let parse_result = parse(raw_dialogue);
+    let dialogue = parse_result.dialogue;
 
     let duration: std::time::Duration = start.elapsed();
     println!("Parsing succeeded in: {duration:?}");
+
+    if !parse_result.warnings.is_empty() {
+        println!("\nWarnings:");
+        for warning in &parse_result.warnings {
+            println!("  {warning}");
+        }
+    }
 
     println!();
 
     match &cli.command {
         Some(Commands::Debug) => {
-            println!("{:#?}", dialogue);
+            println!("{dialogue:#?}");
         }
 
         Some(Commands::Convert { format, path }) => {
@@ -76,7 +84,7 @@ pub fn execute() {
             };
 
             let Some(path) = path else {
-                println!("{}", output);
+                println!("{output}");
                 return;
             };
 
