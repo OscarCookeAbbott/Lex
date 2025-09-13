@@ -23,17 +23,14 @@ pub fn parse(from: String) -> Result<Dialogue, ParseError> {
         }
 
         // Check for new section
-        if let Some(section_name) = line.strip_prefix('#').map(|s| s.trim()) {
+        if let Some(new_section) = parse_section(line) {
             // If the current section has pages, push it to the dialogue
             if !current_section.steps.is_empty() {
                 dialogue.sections.push(current_section);
             }
 
             // Start a new section
-            current_section = DialogueSection {
-                name: section_name.to_string(),
-                steps: Vec::new(),
-            };
+            current_section = new_section;
 
             continue;
         }
@@ -47,43 +44,15 @@ pub fn parse(from: String) -> Result<Dialogue, ParseError> {
             continue;
         }
 
-        // Check for info log
-        // `/// text`
-        if let Some(log_text) = line.strip_prefix("///") {
-            let new_step = DialogueStep::LogInfo(log_text.trim().to_string());
-
-            current_section.steps.push(new_step);
-
-            continue;
-        }
-
-        // Check for warning log
-        // `//? text`
-        if let Some(log_text) = line.strip_prefix("//?") {
-            let new_step = DialogueStep::LogWarning(log_text.trim().to_string());
-
-            current_section.steps.push(new_step);
-
-            continue;
-        }
-
-        // Check for error log
-        // `//! text`
-        if let Some(log_text) = line.strip_prefix("//!") {
-            let new_step = DialogueStep::LogError(log_text.trim().to_string());
-
-            current_section.steps.push(new_step);
-
+        // Check for log steps (info, warning, error)
+        if let Some(log_step) = parse_log_step(line) {
+            current_section.steps.push(log_step);
             continue;
         }
 
         // Basic comment
-        // `// text`
-        if let Some(comment_text) = line.strip_prefix("//") {
-            let new_step = DialogueStep::Comment(comment_text.trim().to_string());
-
-            current_section.steps.push(new_step);
-
+        if let Some(comment_step) = parse_comment_step(line) {
+            current_section.steps.push(comment_step);
             continue;
         }
 
@@ -95,63 +64,26 @@ pub fn parse(from: String) -> Result<Dialogue, ParseError> {
         }
 
         // Variable definition
-        // `$variable_name: value`
-        if let Some((variable_name, variable_value)) =
-            line.strip_prefix('$').and_then(|line| line.split_once(':'))
-        {
-            let variable_name = variable_name.trim().to_lowercase();
-            let variable_value = parse_value(variable_value.trim());
-
+        if let Some((variable_name, variable_value)) = parse_variable_definition(line) {
             dialogue.variables.insert(variable_name, variable_value);
-
             continue;
         }
 
         // Variable assignment
-        // `$variable_name = value`
-        if let Some((variable_name, variable_value)) =
-            line.strip_prefix('$').and_then(|line| line.split_once('='))
-        {
-            let variable_name = variable_name.trim();
-            let variable_value = parse_value(variable_value.trim());
-
-            if !dialogue.variables.contains_key(variable_name) {
-                eprintln!("WARNING: Static variable definition not found [{variable_name}]");
-            }
-
-            let new_step = DialogueStep::VariableAssign {
-                name: variable_name.to_lowercase(),
-                value: variable_value,
-            };
-
-            current_section.steps.push(new_step);
-
+        if let Some(variable_assign_step) = parse_variable_assignment(line, &dialogue) {
+            current_section.steps.push(variable_assign_step);
             continue;
         }
 
         // Section bounce
-        // `=><= jump_section`
-        if let Some(jump_section) = line.strip_prefix("=><=") {
-            let new_step = DialogueStep::SectionBounce(jump_section.trim().to_string());
-
-            current_section.steps.push(new_step);
-
+        if let Some(section_bounce_step) = parse_section_bounce(line) {
+            current_section.steps.push(section_bounce_step);
             continue;
         }
 
         // Section jump
-        // `=> jump_section`
-        if let Some(jump_section) = line.strip_prefix("=>") {
-            let jump_section = jump_section.trim();
-
-            let new_step = match jump_section.to_lowercase().as_str() {
-                "end" => DialogueStep::EndJump,
-                "terminate" => DialogueStep::TerminateJump,
-                _ => DialogueStep::SectionJump(jump_section.to_string()),
-            };
-
-            current_section.steps.push(new_step);
-
+        if let Some(section_jump_step) = parse_section_jump(line) {
+            current_section.steps.push(section_jump_step);
             continue;
         }
 
@@ -167,6 +99,99 @@ pub fn parse(from: String) -> Result<Dialogue, ParseError> {
     }
 
     Ok(dialogue)
+}
+
+/// Parses a section header line
+/// `# section_name`
+fn parse_section(line: &str) -> Option<DialogueSection> {
+    let section_name = line.strip_prefix('#').map(|s| s.trim())?;
+    
+    Some(DialogueSection {
+        name: section_name.to_string(),
+        steps: Vec::new(),
+    })
+}
+
+/// Parses log steps (info, warning, error)
+/// `/// text` or `//? text` or `//! text`
+fn parse_log_step(line: &str) -> Option<DialogueStep> {
+    // Check for info log
+    // `/// text`
+    if let Some(log_text) = line.strip_prefix("///") {
+        return Some(DialogueStep::LogInfo(log_text.trim().to_string()));
+    }
+
+    // Check for warning log
+    // `//? text`
+    if let Some(log_text) = line.strip_prefix("//?") {
+        return Some(DialogueStep::LogWarning(log_text.trim().to_string()));
+    }
+
+    // Check for error log
+    // `//! text`
+    if let Some(log_text) = line.strip_prefix("//!") {
+        return Some(DialogueStep::LogError(log_text.trim().to_string()));
+    }
+
+    None
+}
+
+/// Parses comment steps
+/// `// text`
+fn parse_comment_step(line: &str) -> Option<DialogueStep> {
+    let comment_text = line.strip_prefix("//")?;
+    Some(DialogueStep::Comment(comment_text.trim().to_string()))
+}
+
+/// Parses variable definitions
+/// `$variable_name: value`
+fn parse_variable_definition(line: &str) -> Option<(String, DialogueValue)> {
+    let (variable_name, variable_value) = line.strip_prefix('$').and_then(|line| line.split_once(':'))?;
+    
+    let variable_name = variable_name.trim().to_lowercase();
+    let variable_value = parse_value(variable_value.trim());
+
+    Some((variable_name, variable_value))
+}
+
+/// Parses variable assignments
+/// `$variable_name = value`
+fn parse_variable_assignment(line: &str, dialogue: &Dialogue) -> Option<DialogueStep> {
+    let (variable_name, variable_value) = line.strip_prefix('$').and_then(|line| line.split_once('='))?;
+    
+    let variable_name = variable_name.trim();
+    let variable_value = parse_value(variable_value.trim());
+
+    if !dialogue.variables.contains_key(variable_name) {
+        eprintln!("WARNING: Static variable definition not found [{variable_name}]");
+    }
+
+    Some(DialogueStep::VariableAssign {
+        name: variable_name.to_lowercase(),
+        value: variable_value,
+    })
+}
+
+/// Parses section bounce steps
+/// `=><= jump_section`
+fn parse_section_bounce(line: &str) -> Option<DialogueStep> {
+    let jump_section = line.strip_prefix("=><=")?;
+    Some(DialogueStep::SectionBounce(jump_section.trim().to_string()))
+}
+
+/// Parses section jump steps
+/// `=> jump_section`
+fn parse_section_jump(line: &str) -> Option<DialogueStep> {
+    let jump_section = line.strip_prefix("=>")?;
+    let jump_section = jump_section.trim();
+
+    let new_step = match jump_section.to_lowercase().as_str() {
+        "end" => DialogueStep::EndJump,
+        "terminate" => DialogueStep::TerminateJump,
+        _ => DialogueStep::SectionJump(jump_section.to_string()),
+    };
+
+    Some(new_step)
 }
 
 /// Converts the given string into a dialogue value type.
